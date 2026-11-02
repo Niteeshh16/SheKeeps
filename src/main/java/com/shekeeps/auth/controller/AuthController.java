@@ -39,7 +39,7 @@ public class AuthController {
         String token=null; String authorization=request.getHeader(HttpHeaders.AUTHORIZATION);
         if(authorization!=null && authorization.startsWith("Bearer ")) token=authorization.substring(7);
         else if(request.getCookies()!=null) for(var cookie:request.getCookies()) if(cookie.getName().equals("accessToken")){token=cookie.getValue();break;}
-        return ResponseEntity.ok(Map.of("status","success","data",Map.of("user",auth.authenticate(token))));
+        return ResponseEntity.ok(Map.of("status","success","data",Map.of("user",auth.authenticate(token),"authBypass",auth.authBypassEnabled())));
     }
     private String token(TokenRequest body,HttpServletRequest request) {
         if(request.getCookies()!=null) for(var cookie:request.getCookies()) if(cookie.getName().equals("refreshToken")) return cookie.getValue();

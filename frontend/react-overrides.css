@@ -1,0 +1,18 @@
+.modal-backdrop{position:fixed;inset:0;z-index:15;background:rgba(33,47,37,.34);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:16px}
+.editor-card,.search-card{position:relative;margin:0;background:#fff;max-height:calc(100vh - 32px);overflow:auto}
+.editor-card form{padding:26px}
+.search-backdrop{align-items:flex-start}
+.search-card{margin-top:10vh}
+.search-card .search-input-wrap{padding:15px 19px 12px}
+.search-card .search-results{padding:0 19px 18px}
+.search-result{display:block;width:100%;border:0;background:transparent;text-align:left;color:var(--ink)}
+.search-result:hover{background:#f7f8f4}
+.journal-editor-top .eyebrow{display:flex;flex-direction:column;gap:7px}
+.journal-editor-top input[type=date]{font:11px 'DM Sans',sans-serif;color:#718071;border:1px solid #e5e8e1;border-radius:6px;padding:7px 8px}
+.journal-editor .journal-title-input{font-family:'Playfair Display',serif;font-size:20px;padding:8px 0;border-bottom:1px solid #edeee9;margin-bottom:15px}
+.journal-editor .journal-editor-bottom>div{display:flex;gap:8px}
+.journal-entry.selected{background:#f6f8f4;margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:6px}
+.loading-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#879287;font-size:12px}
+.loading-screen p{margin:0}
+.todo-page .task-list{min-height:180px}
+.task-row .icon-button{flex:0 0 34px}

@@ -23,6 +23,7 @@ public class AuthService {
     private final PasswordEncoder passwords;
     @Value("${app.jwt-access-secret}") private String accessSecret;
     @Value("${app.jwt-refresh-secret}") private String refreshSecret;
+    @Value("${app.auth-bypass:false}") private boolean authBypass;
     @Value("${app.jwt-access-expiration:15m}") private String accessTtl;
     @Value("${app.jwt-refresh-expiration:7d}") private String refreshTtl;
     private SecretKeyHolder accessKey, refreshKey;
@@ -70,10 +71,21 @@ public class AuthService {
     @Transactional public void logout(String token) { if (token != null && !token.isBlank()) db.update("DELETE FROM refresh_tokens WHERE token_hash=?",hash(token)); }
 
     public User authenticate(String token) {
+        if (authBypass) return guestUser();
         if (token == null || token.isBlank()) throw new ApiException(HttpStatus.UNAUTHORIZED,"Authentication required. Please log in.");
         Claims claims = parse(token,accessKey);
         try { return findById(UUID.fromString(claims.getSubject())).orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,"The user belonging to this token no longer exists.")); }
         catch (IllegalArgumentException ex) { throw new ApiException(HttpStatus.UNAUTHORIZED,"Invalid access token."); }
+    }
+
+    public boolean authBypassEnabled() { return authBypass; }
+
+    private synchronized User guestUser() {
+        var existing = findByEmail("guest@shekeeps.local");
+        if (existing.isPresent()) return existing.get();
+        UUID id = db.queryForObject("INSERT INTO users(email,password_hash,name) VALUES(?,?,?) RETURNING id", UUID.class,
+                "guest@shekeeps.local", passwords.encode(UUID.randomUUID().toString()), "Local Guest");
+        return findById(id).orElseThrow();
     }
 
     public boolean databaseHealthy() { try { return Boolean.TRUE.equals(db.queryForObject("SELECT TRUE",Boolean.class)); } catch (Exception ex) { return false; } }

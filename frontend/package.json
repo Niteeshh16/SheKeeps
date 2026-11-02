@@ -1,8 +1,19 @@
 {
   "name": "shekeeps-frontend",
   "private": true,
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "dev": "vite --host 127.0.0.1",
+    "start": "vite --host 127.0.0.1",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.0",
+    "vite": "^8.0.0"
   }
 }
