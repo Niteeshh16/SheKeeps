@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+.m2-repository/
+.idea/
+.vscode/
+.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+*.log

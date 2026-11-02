@@ -1,0 +1,56 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE IF NOT EXISTS users (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ email VARCHAR(255) NOT NULL UNIQUE,
+ password_hash VARCHAR(255) NOT NULL,
+ name VARCHAR(100) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(LOWER(email));
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ token_hash VARCHAR(64) NOT NULL UNIQUE,
+ expires_at TIMESTAMPTZ NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+
+CREATE TABLE IF NOT EXISTS notes (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ title VARCHAR(200) NOT NULL,
+ content TEXT NOT NULL DEFAULT '',
+ category VARCHAR(40) NOT NULL DEFAULT 'Personal',
+ color VARCHAR(20) NOT NULL DEFAULT 'lavender',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_notes_user_updated ON notes(user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS tasks (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ title VARCHAR(200) NOT NULL,
+ details TEXT NOT NULL DEFAULT '',
+ due_date DATE,
+ priority VARCHAR(10) NOT NULL DEFAULT 'normal' CHECK (priority IN ('low','normal','high')),
+ completed BOOLEAN NOT NULL DEFAULT FALSE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_user_due ON tasks(user_id, completed, due_date);
+
+CREATE TABLE IF NOT EXISTS journal_entries (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ entry_date DATE NOT NULL,
+ title VARCHAR(200) NOT NULL DEFAULT '',
+ content TEXT NOT NULL DEFAULT '',
+ mood VARCHAR(30) NOT NULL DEFAULT 'Calm',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(user_id, entry_date)
+);
+CREATE INDEX IF NOT EXISTS idx_journal_user_date ON journal_entries(user_id, entry_date DESC);
