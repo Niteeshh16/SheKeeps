@@ -240,6 +240,7 @@ function JournalView({ entries, draft, setDraft, onSave, onDelete }) {
 function Editor({ editor, onSave, onClose, onDelete }) {
   const { kind, item } = editor;
   const isNote = kind === 'note', isTodo = kind === 'todo';
+  if (isNote) return <NoteComposer item={item} onSave={onSave} onClose={onClose} onDelete={onDelete} />;
   const title = isNote ? 'Put it into words.' : isTodo ? 'Add to your todo list.' : 'What do you want to remember?';
   return <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}><section className="editor-dialog editor-card" role="dialog" aria-modal="true" aria-labelledby="editor-title"><form onSubmit={onSave}><div className="dialog-top"><span className="eyebrow">{isNote ? 'A NOTE' : isTodo ? 'A NEW TODO' : 'JOURNAL ENTRY'}</span><button className="icon-button" type="button" onClick={onClose} aria-label="Close">×</button></div><h2 id="editor-title">{title}</h2><input type="hidden" name="kind" value={kind} /><input type="hidden" name="id" value={item?.id || ''} /><input type="hidden" name="color" value={item?.color || ['lavender', 'sage', 'peach', 'blue'][Math.floor(Math.random() * 4)]} />
     <label className="field">Title<input name="title" maxLength="200" defaultValue={item?.title || ''} placeholder={isTodo ? 'What needs doing?' : 'Give it a name'} required autoFocus /></label>
@@ -248,6 +249,35 @@ function Editor({ editor, onSave, onClose, onDelete }) {
     {!isTodo && <label className="field">{isNote ? 'Your thoughts' : 'Your entry'}<textarea name="content" rows="6" defaultValue={item?.content || ''} placeholder="Start wherever you are…" /></label>}
     {!isNote && !isTodo && <><input type="hidden" name="entryDate" value={item?.entryDate || TODAY()} /><label className="field">How are you feeling?<select name="mood" defaultValue={item?.mood || 'Calm'}>{['Calm', 'Happy', 'Grateful', 'Focused', 'Tired', 'Thoughtful', 'Anxious'].map(mood => <option key={mood}>{mood}</option>)}</select></label></>}
     <div className="dialog-actions">{item?.id && <button className="button button-quiet" type="button" onClick={onDelete}>Delete</button>}<button type="button" className="button button-quiet" onClick={onClose}>Cancel</button><button className="button button-dark">Save</button></div></form></section></div>;
+}
+
+function NoteComposer({ item, onSave, onClose, onDelete }) {
+  const [content, setContent] = useState(item?.content || '');
+  const textRef = React.useRef(null);
+  useEffect(() => {
+    const closeOnEscape = event => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+  const addAtCursor = (text, wrap = false) => {
+    const field = textRef.current;
+    if (!field) return;
+    const start = field.selectionStart, end = field.selectionEnd;
+    const selected = content.slice(start, end);
+    const addition = wrap && selected ? `${text}${selected}` : text;
+    const next = `${content.slice(0, start)}${addition}${content.slice(end)}`;
+    setContent(next);
+    requestAnimationFrame(() => { field.focus(); const cursor = start + addition.length; field.setSelectionRange(cursor, cursor); });
+  };
+  const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+  return <div className="modal-backdrop note-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}><section className="editor-dialog editor-card note-composer" role="dialog" aria-modal="true" aria-labelledby="note-editor-title"><form onSubmit={onSave}>
+    <div className="note-composer-top"><div className="note-brand-mark">✳</div><span className="note-composer-kicker">{item ? 'A NOTE TO KEEP' : 'QUICK CAPTURE'}</span><button className="icon-button" type="button" onClick={onClose} aria-label="Close note editor">×</button></div>
+    <div className="note-composer-heading"><h2 id="note-editor-title">{item ? 'Keep shaping this thought.' : 'What’s on your mind?'}</h2><p>Ideas, lists, plans, little things to remember — let them land here.</p></div>
+    <input type="hidden" name="kind" value="note" /><input type="hidden" name="id" value={item?.id || ''} /><input type="hidden" name="color" value={item?.color || 'lavender'} />
+    <div className="note-meta-row"><label className="note-title-field"><span className="sr-only">Title</span><input name="title" maxLength="200" defaultValue={item?.title || ''} placeholder="Give this note a title…" required autoFocus /></label><label className="note-category-field"><span className="sr-only">Category</span><select name="category" defaultValue={item?.category || 'Personal'} aria-label="Note category">{['Personal', 'Work', 'Ideas', 'Reading'].map(value => <option key={value}>{value}</option>)}</select></label></div>
+    <div className="note-writing-surface"><div className="note-toolbar"><span>MAKE YOURSELF AT HOME</span><div><button type="button" title="Add a heading" onClick={() => addAtCursor('## ')}>H<small>2</small></button><button type="button" title="Add a bullet" onClick={() => addAtCursor('\n• ')}>• <span>List</span></button><button type="button" title="Add a checkbox" onClick={() => addAtCursor('\n☐ ')}>☐ <span>Task</span></button><button type="button" title="Add a quote" onClick={() => addAtCursor('\n> ')}><span>❝ Quote</span></button></div></div><textarea ref={textRef} name="content" maxLength="20000" value={content} onChange={event => setContent(event.target.value)} placeholder="Start anywhere. Add a list, a plan, or a passing thought…" /></div>
+    <div className="note-composer-footer"><span>{words} {words === 1 ? 'word' : 'words'} <i>·</i> Ready when you are</span><div className="dialog-actions">{item?.id && <button className="button button-quiet" type="button" onClick={onDelete}>Delete</button>}<button type="button" className="button button-quiet" onClick={onClose}>Cancel</button><button className="button button-dark">Save note <span>→</span></button></div></div>
+  </form></section></div>;
 }
 
 function SearchDialog({ query, setQuery, results, onClose, onSelect }) {
