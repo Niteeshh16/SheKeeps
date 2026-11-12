@@ -29,7 +29,7 @@ public class WorkspaceController {
                             @Size(max=40) String category, @Size(max=20) String color) {}
     public record TaskInput(@NotBlank @Size(max=200) String title, String details, LocalDate dueDate,
                             String priority, Boolean completed) {}
-    public record JournalInput(LocalDate entryDate, @Size(max=200) String title, String content, String mood) {}
+    public record JournalInput(LocalDate entryDate, @Size(max=200) String title, String content, String mood, String status, String remarks) {}
 
     @GetMapping("/notes") public Map<String,Object> notes(HttpServletRequest request) {
         UUID uid = userId(request);
@@ -64,17 +64,17 @@ public class WorkspaceController {
     @DeleteMapping("/tasks/{id}") public Map<String,Object> deleteTask(@PathVariable UUID id,HttpServletRequest request) { delete("tasks",id,userId(request)); return Map.of("status","success","message","Task deleted"); }
 
     @GetMapping("/journal") public Map<String,Object> journal(HttpServletRequest request) {
-        var rows=db.query("SELECT id,entry_date,title,content,mood,created_at,updated_at FROM journal_entries WHERE user_id=? ORDER BY entry_date DESC",
-                (rs,n)->Map.of("id",rs.getObject("id",UUID.class),"entryDate",rs.getObject("entry_date",LocalDate.class),"title",rs.getString("title"),"content",rs.getString("content"),"mood",rs.getString("mood"),"createdAt",rs.getObject("created_at",OffsetDateTime.class),"updatedAt",rs.getObject("updated_at",OffsetDateTime.class)),userId(request));
+        var rows=db.query("SELECT id,entry_date,title,content,mood,status,remarks,created_at,updated_at FROM journal_entries WHERE user_id=? ORDER BY entry_date DESC",
+                (rs,n)->Map.of("id",rs.getObject("id",UUID.class),"entryDate",rs.getObject("entry_date",LocalDate.class),"title",rs.getString("title"),"content",rs.getString("content"),"mood",rs.getString("mood"),"status",rs.getString("status"),"remarks",rs.getString("remarks"),"createdAt",rs.getObject("created_at",OffsetDateTime.class),"updatedAt",rs.getObject("updated_at",OffsetDateTime.class)),userId(request));
         return ok(rows);
     }
     @PostMapping("/journal") @ResponseStatus(HttpStatus.CREATED) public Map<String,Object> createJournal(@Valid @RequestBody JournalInput body,HttpServletRequest request) {
         LocalDate date=body.entryDate()==null?LocalDate.now():body.entryDate();
-        return ok(db.queryForMap("INSERT INTO journal_entries(user_id,entry_date,title,content,mood) VALUES(?,?,?,?,?) ON CONFLICT(user_id,entry_date) DO UPDATE SET title=EXCLUDED.title,content=EXCLUDED.content,mood=EXCLUDED.mood,updated_at=NOW() RETURNING id,entry_date AS \"entryDate\",title,content,mood,created_at AS \"createdAt\",updated_at AS \"updatedAt\"",userId(request),date,or(body.title(),""),or(body.content(),""),or(body.mood(),"Calm")));
+        return ok(db.queryForMap("INSERT INTO journal_entries(user_id,entry_date,title,content,mood,status,remarks) VALUES(?,?,?,?,?,?,?) RETURNING id,entry_date AS \"entryDate\",title,content,mood,status,remarks,created_at AS \"createdAt\",updated_at AS \"updatedAt\"",userId(request),date,or(body.title(),""),or(body.content(),""),or(body.mood(),"Calm"),or(body.status(),"Completed"),or(body.remarks(),"")));
     }
     @PutMapping("/journal/{id}") public Map<String,Object> updateJournal(@PathVariable UUID id,@Valid @RequestBody JournalInput body,HttpServletRequest request) {
         LocalDate date=body.entryDate()==null?LocalDate.now():body.entryDate();
-        return ok(db.queryForMap("UPDATE journal_entries SET entry_date=?,title=?,content=?,mood=?,updated_at=NOW() WHERE id=? AND user_id=? RETURNING id,entry_date AS \"entryDate\",title,content,mood,created_at AS \"createdAt\",updated_at AS \"updatedAt\"",date,or(body.title(),""),or(body.content(),""),or(body.mood(),"Calm"),id,userId(request)));
+        return ok(db.queryForMap("UPDATE journal_entries SET entry_date=?,title=?,content=?,mood=?,status=?,remarks=?,updated_at=NOW() WHERE id=? AND user_id=? RETURNING id,entry_date AS \"entryDate\",title,content,mood,status,remarks,created_at AS \"createdAt\",updated_at AS \"updatedAt\"",date,or(body.title(),""),or(body.content(),""),or(body.mood(),"Calm"),or(body.status(),"Completed"),or(body.remarks(),""),id,userId(request)));
     }
     @DeleteMapping("/journal/{id}") public Map<String,Object> deleteJournal(@PathVariable UUID id,HttpServletRequest request) { delete("journal_entries",id,userId(request)); return Map.of("status","success","message","Journal entry deleted"); }
 

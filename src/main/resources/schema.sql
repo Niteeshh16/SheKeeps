@@ -49,8 +49,12 @@ CREATE TABLE IF NOT EXISTS journal_entries (
  title VARCHAR(200) NOT NULL DEFAULT '',
  content TEXT NOT NULL DEFAULT '',
  mood VARCHAR(30) NOT NULL DEFAULT 'Calm',
+ status VARCHAR(30) NOT NULL DEFAULT 'Completed',
+ remarks TEXT NOT NULL DEFAULT '',
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
- updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
- UNIQUE(user_id, entry_date)
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_journal_user_date ON journal_entries(user_id, entry_date DESC);
+ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS journal_entries_user_id_entry_date_key;
+ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'Completed';
+ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '';

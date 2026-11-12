@@ -88,7 +88,7 @@ function App() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const id = form.get('id');
-    const data = { entryDate: form.get('entryDate') || TODAY(), title: form.get('title') || '', content: form.get('content') || '', mood: form.get('mood') || 'Calm' };
+    const data = { entryDate: form.get('entryDate') || TODAY(), title: form.get('title') || '', content: form.get('content') || '', mood: form.get('mood') || 'Calm', status: form.get('status') || 'Completed', remarks: form.get('remarks') || '' };
     if (!data.title.trim() && !data.content.trim()) { notify('Write a few words before saving.'); return; }
     try { await api(`/journal${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) }); await loadWorkspace(); setJournalDraft(null); notify('Journal entry saved'); }
     catch (error) { notify(error.message); }
@@ -130,7 +130,7 @@ function App() {
   if (!user) return <AuthScreen mode={authMode} setMode={setAuthMode} onSubmit={submitAuth} error={authError} busy={busy} />;
 
   const firstName = user.name?.split(' ')[0] || 'there';
-  const pageNames = { home: 'Today', notes: 'Notes', todos: 'Todo list', journal: 'Journal' };
+  const pageNames = { home: 'Today', notes: 'Notes', todos: 'Todo list', journal: 'Daily activities' };
   return <>
     <div className="app-shell">
       <aside className="sidebar">
@@ -140,7 +140,7 @@ function App() {
           <NavButton current={view} id="home" icon="⌂" onClick={changeView}>Today</NavButton>
           <NavButton current={view} id="notes" icon="▤" count={notes.length} onClick={changeView}>Notes</NavButton>
           <NavButton current={view} id="todos" icon="☑" count={pendingTodos.length} onClick={changeView}>Todo list</NavButton>
-          <NavButton current={view} id="journal" icon="◷" onClick={changeView}>Journal</NavButton>
+          <NavButton current={view} id="journal" icon="◷" onClick={changeView}>Daily activities</NavButton>
         </nav>
         <div className="side-spacer" />
         <div className="sidebar-quote"><span>“</span><p>Almost everything will work again if you unplug it for a few minutes, including you.</p><small>ANNE LAMOTT</small></div>
@@ -148,7 +148,7 @@ function App() {
         {!bypass && <button className="logout-button" onClick={signOut}>Sign out</button>}
       </aside>
       <main className="main-area">
-        <header className="topbar"><div className="breadcrumbs"><span>MY WORKSPACE</span><b>/</b><strong>{pageNames[view]}</strong></div><div className="topbar-actions"><span className="today-date">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span><button className="icon-button search-button" aria-label="Search" onClick={() => { setSearchOpen(true); setQuery(''); }}>⌕</button><button className="button button-dark create-button" onClick={() => openEditor(view === 'todos' ? 'todo' : view === 'journal' ? 'journal' : 'note')}>＋ <span>Create new</span></button></div></header>
+        <header className="topbar"><div className="breadcrumbs"><span>MY WORKSPACE</span><b>/</b><strong>{pageNames[view]}</strong></div><div className="topbar-actions"><span className="today-date">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span><button className="icon-button search-button" aria-label="Search" onClick={() => { setSearchOpen(true); setQuery(''); }}>⌕</button><button className="button button-dark create-button" onClick={() => view === 'journal' ? setJournalDraft({ entryDate: TODAY(), title: '', content: '', status: 'Completed', remarks: '' }) : openEditor(view === 'todos' ? 'todo' : 'note')}>＋ <span>Create new</span></button></div></header>
         <div className="view-root">
           {view === 'home' && <HomeView firstName={firstName} notes={notes} todos={pendingTodos} entry={todayEntry} onView={changeView} onCreate={openEditor} onEdit={openEditor} onToggle={toggleTodo} onWrite={() => openJournal(todayEntry || null)} />}
           {view === 'notes' && <NotesView notes={filteredNotes} filter={noteFilter} setFilter={setNoteFilter} onCreate={() => openEditor('note')} onEdit={item => openEditor('note', item)} />}
@@ -197,28 +197,23 @@ function TodosView({ todos, filter, setFilter, onCreate, onEdit, onToggle }) {
   return <><SectionHeading eyebrow="ONE THING AT A TIME" title="Todo list" subtitle="Keep your plans kind, clear, and doable." action="Add a todo" onClick={onCreate} /><div className="filter-row"><div className="task-filters">{['All', 'Not done', 'Done'].map(value => <button key={value} className={cx('filter-chip', filter === value && 'active')} onClick={() => setFilter(value)}>{value}{value === 'All' ? ` · ${todos.length}` : ''}</button>)}</div></div><article className="panel task-page"><div className="task-list">{todos.length ? todos.map(todo => <TodoRow key={todo.id} todo={todo} onToggle={onToggle} onEdit={onEdit} />) : <Empty title={filter === 'Done' ? 'No completed todos yet' : 'Your list is clear'} action="Add a todo" onClick={onCreate}>Add a task and check it off when you’re done.</Empty>}</div></article></>;
 }
 function JournalView({ entries, draft, setDraft, onSave, onDelete }) {
-  const current = draft || { entryDate: TODAY(), title: '', content: '', mood: 'Calm' };
+  const current = draft || { entryDate: TODAY(), title: '', content: '', mood: 'Calm', status: 'Completed', remarks: '' };
   const prompts = ['What felt like you today?', 'What is taking up space in your mind?', 'What are three small things you’re grateful for?', 'What would make tomorrow feel gentler?', 'When did you feel most present today?'];
   const moods = [{ name: 'Calm', face: '☁️' }, { name: 'Happy', face: '☀️' }, { name: 'Grateful', face: '💛' }, { name: 'Focused', face: '🌿' }, { name: 'Tired', face: '🌙' }, { name: 'Thoughtful', face: '🍃' }, { name: 'Anxious', face: '🌧️' }];
   const [promptIndex, setPromptIndex] = useState(0);
-  const [savedDraft, setSavedDraft] = useState(false);
   const [focus, setFocus] = useState(false);
   const textRef = React.useRef(null);
   const content = current.content || '';
   const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-  useEffect(() => {
-    if (current.id || current.title || content) return;
-    try {
-      const recovered = localStorage.getItem(`shekeeps-journal-draft-${current.entryDate || TODAY()}`);
-      if (recovered) setDraft(JSON.parse(recovered));
-    } catch { /* Ignore malformed or unavailable local drafts. */ }
-  }, [current.id, current.entryDate, current.title, content, setDraft]);
-  useEffect(() => {
-    const key = `shekeeps-journal-draft-${current.id || current.entryDate || TODAY()}`;
-    if (content || current.title) {
-      try { localStorage.setItem(key, JSON.stringify({ title: current.title || '', content, mood: current.mood || 'Calm', entryDate: current.entryDate || TODAY() })); setSavedDraft(true); } catch { /* Storage may be unavailable. */ }
-    } else setSavedDraft(false);
-  }, [current.id, current.entryDate, current.title, current.mood, content]);
+  const [activityMonth, setActivityMonth] = useState(TODAY().slice(0, 7));
+  const monthEntries = entries.filter(entry => String(entry.entryDate).slice(0, 7) === activityMonth).sort((a, b) => String(a.entryDate).localeCompare(String(b.entryDate)));
+  const exportMonth = () => {
+    const esc = value => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const rows = monthEntries.map(entry => `<tr><td>${esc(entry.entryDate)}</td><td>${esc(entry.title)}</td><td>${esc(entry.status || 'Completed')}</td><td>${esc(entry.content)}</td><td>${esc(entry.remarks)}</td></tr>`).join('');
+    const html = `<html><head><meta charset="utf-8"></head><body><table><thead><tr><th>Date</th><th>Task / Work Description</th><th>Status</th><th>Work Details / Outcome</th><th>Remarks</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+    const url = URL.createObjectURL(new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = `daily-activities-${activityMonth}.xls`; link.click(); URL.revokeObjectURL(url);
+  };
   const insertText = (before, after = '') => {
     const field = textRef.current;
     if (!field) return;
@@ -234,7 +229,7 @@ function JournalView({ entries, draft, setDraft, onSave, onDelete }) {
     setPromptIndex((promptIndex + 1) % prompts.length);
     requestAnimationFrame(() => textRef.current?.focus());
   };
-  return <div className={cx('journal-experience', focus && 'journal-focus')}><div className="journal-intro"><div><span className="eyebrow">A MOMENT TO REFLECT</span><h1>Your journal</h1><p>A little space to notice what’s happening within.</p></div><button type="button" className="button button-quiet focus-toggle" onClick={() => setFocus(!focus)}>{focus ? '← Back to journal' : '↗ Focus mode'}</button></div><div className="journal-layout"><form className="journal-editor journal-writing-card" onSubmit={onSave}><input type="hidden" name="id" value={current.id || ''} /><div className="journal-editor-top"><label className="eyebrow">TODAY, OR ANY DAY<input type="date" name="entryDate" value={String(current.entryDate || TODAY()).slice(0, 10)} onChange={event => setDraft({ ...current, entryDate: event.target.value })} /></label><span className="draft-status">{savedDraft ? '● Draft saved on this device' : '○ New entry'}</span></div><div className="mood-checkin"><span className="writing-label">HOW ARE YOU ARRIVING?</span><div className="mood-options">{moods.map(mood => <button type="button" key={mood.name} className={cx('mood-option', current.mood === mood.name && 'active')} onClick={() => setDraft({ ...current, mood: mood.name })}><span>{mood.face}</span>{mood.name}</button>)}</div><input type="hidden" name="mood" value={current.mood || 'Calm'} /></div><input className="journal-title-input" name="title" maxLength="200" placeholder="Give today a name…" value={current.title || ''} onChange={event => setDraft({ ...current, title: event.target.value })} /><div className="writing-toolbar"><span>YOUR THOUGHTS</span><div><button type="button" title="Bold" onClick={() => insertText('**', '**')}><b>B</b></button><button type="button" title="Italic" onClick={() => insertText('_', '_')}><i>I</i></button><button type="button" title="Add a list item" onClick={() => insertText('\n• ')}>• List</button></div></div><textarea ref={textRef} name="content" placeholder="Start with one small thing. There’s no right way to write here…" value={content} onChange={event => setDraft({ ...current, content: event.target.value })} /><div className="prompt-strip"><span>✦ A gentle prompt</span><p>{prompts[promptIndex]}</p><button type="button" onClick={setPrompt}>Use prompt <span>↗</span></button><button type="button" className="prompt-refresh" aria-label="Next prompt" onClick={() => setPromptIndex((promptIndex + 1) % prompts.length)}>↻</button></div><div className="journal-editor-bottom"><small>{words} {words === 1 ? 'word' : 'words'}{savedDraft && ' · Saved on this device'}</small><div>{current.id && <button type="button" className="button button-quiet" onClick={() => onDelete(current)}>Delete</button>}<button className="button button-dark">{current.id ? 'Update entry' : 'Save entry'} <span>→</span></button></div></div></form><aside className="journal-side"><section className="reflection-card"><span className="reflection-mark">✳</span><span className="eyebrow">A SMALL REMINDER</span><p>You don’t have to have it all figured out to write it down.</p><small>Show up as you are.</small></section><section className="panel journal-list-panel"><div className="panel-heading"><div><h2 className="panel-title">Your entries</h2><p className="panel-sub">{entries.length ? `${entries.length} moments collected` : 'Your moments, gathered here.'}</p></div><button type="button" className="link-button" onClick={() => setDraft({ entryDate: TODAY(), title: '', content: '', mood: 'Calm' })}>＋ New</button></div>{entries.length ? entries.map(entry => <article key={entry.id} className={cx('journal-entry', draft?.id === entry.id && 'selected')} onClick={() => setDraft(entry)}><time>{fmtDate(entry.entryDate, { weekday: 'short', month: 'long', day: 'numeric' })} · {entry.mood}</time><h3>{entry.title || 'A note to self'}</h3><p>{entry.content || 'No words yet. Open to keep writing.'}</p></article>) : <Empty title="Your story starts here">Write a few words about today.</Empty>}</section></aside></div></div>;
+  return <div className={cx('journal-experience', focus && 'journal-focus')}><div className="journal-intro"><div><span className="eyebrow">DAILY WORK LOG</span><h1>Daily activities</h1><p>Record your work, outcomes, and notes for each day.</p></div></div><div className="journal-layout"><form className="journal-editor journal-writing-card" onSubmit={onSave}><input type="hidden" name="id" value={current.id || ''} /><div className="journal-editor-top"><label className="eyebrow">DATE<input type="date" name="entryDate" value={String(current.entryDate || TODAY()).slice(0, 10)} onChange={event => setDraft({ ...current, entryDate: event.target.value })} /></label><span className="draft-status">{current.id ? 'Editing saved activity' : 'New activity'}</span></div><label className="field">Task / work description<input className="activity-title" name="title" maxLength="200" placeholder="What did you work on?" value={current.title || ''} onChange={event => setDraft({ ...current, title: event.target.value })} /></label><label className="field">Status<select name="status" value={current.status || 'Completed'} onChange={event => setDraft({ ...current, status: event.target.value })}>{['Completed', 'In progress', 'Pending', 'Blocked'].map(value => <option key={value}>{value}</option>)}</select></label><label className="field">Work details / outcome<textarea name="content" rows="5" placeholder="What did you complete or achieve?" value={content} onChange={event => setDraft({ ...current, content: event.target.value })} /></label><label className="field">Remarks<textarea name="remarks" rows="3" placeholder="Additional notes (optional)" value={current.remarks || ''} onChange={event => setDraft({ ...current, remarks: event.target.value })} /></label><input type="hidden" name="mood" value={current.mood || 'Calm'} /><div className="journal-editor-bottom"><small>{words} {words === 1 ? 'word' : 'words'}</small><div>{current.id && <button type="button" className="button button-quiet" onClick={() => onDelete(current)}>Delete activity</button>}<button className="button button-dark">{current.id ? 'Update activity' : 'Save activity'}</button></div></div></form><aside className="journal-side"><section className="panel journal-list-panel activity-list-panel"><div className="panel-heading"><div><h2 className="panel-title">Activity list</h2><p className="panel-sub">{entries.length} saved {entries.length === 1 ? 'activity' : 'activities'}</p></div><button type="button" className="link-button" onClick={() => setDraft({ entryDate: TODAY(), title: '', content: '', mood: 'Calm', status: 'Completed', remarks: '' })}>＋ New</button></div><div className="activity-export"><input aria-label="Export month" type="month" value={activityMonth} onChange={event => setActivityMonth(event.target.value)} /><button type="button" className="button button-dark" disabled={!monthEntries.length} onClick={exportMonth}>Export month to Excel</button></div><div className="activity-table-wrap"><table className="activity-table"><thead><tr><th>Date</th><th>Task / work description</th><th>Status</th><th>Work details / outcome</th><th>Remarks</th><th>Action</th></tr></thead><tbody>{monthEntries.map(entry => <tr key={entry.id} className={draft?.id === entry.id ? 'selected' : ''} onClick={() => setDraft(entry)}><td>{fmtDate(entry.entryDate, { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>{entry.title || '—'}</td><td>{entry.status || 'Completed'}</td><td>{entry.content || '—'}</td><td>{entry.remarks || '—'}</td><td><button type="button" className="activity-delete" aria-label={`Delete activity: ${entry.title || entry.entryDate}`} onClick={event => { event.stopPropagation(); onDelete(entry); }}>Delete</button></td></tr>)}</tbody></table>{!monthEntries.length && <p className="muted activity-empty">No activities saved for this month yet.</p>}</div></section></aside></div></div>;
 }
 
 function Editor({ editor, onSave, onClose, onDelete }) {
