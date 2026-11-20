@@ -55,6 +55,15 @@ public class AuthService {
         return authResponse((User)row[0],"Logged in successfully");
     }
 
+    @Transactional public Map<String,Object> loginWithGoogle(String email, String name) {
+        User user = findByEmail(email).orElseGet(() -> {
+            UUID id = db.queryForObject("INSERT INTO users(email,password_hash,name) VALUES(LOWER(?),?,?) RETURNING id", UUID.class,
+                    email.trim(), passwords.encode(UUID.randomUUID().toString()), name == null || name.isBlank() ? email.substring(0, email.indexOf('@')) : name.trim());
+            return findById(id).orElseThrow();
+        });
+        return authResponse(user, "Signed in with Google");
+    }
+
     @Transactional public Map<String,Object> refresh(String token) {
         if (token == null || token.isBlank()) throw new ApiException(HttpStatus.BAD_REQUEST,"Refresh token is required");
         Claims claims = parse(token,refreshKey);

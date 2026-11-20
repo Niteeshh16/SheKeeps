@@ -13,8 +13,12 @@ async function api(path, options = {}) {
     const refreshed = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
     if (refreshed.ok) response = await fetch(`/api${path}`, init);
   }
-  const body = await response.json().catch(() => ({ message: 'Something went wrong.' }));
-  if (!response.ok) throw new Error(body.message || 'Something went wrong.');
+  const responseText = await response.text();
+  let body;
+  try { body = responseText ? JSON.parse(responseText) : {}; }
+  catch { body = {}; }
+  if (!response.ok) throw new Error(body.message || `Request failed (HTTP ${response.status}).`);
+  if (!body || typeof body !== 'object') throw new Error('The server returned an invalid response.');
   return body.data;
 }
 
@@ -44,6 +48,8 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const oauthError = new URLSearchParams(window.location.search).get('oauthError');
+    if (oauthError) { setAuthError(oauthError); window.history.replaceState({}, '', window.location.pathname); }
     (async () => {
       try {
         const me = await api('/auth/me');
@@ -90,7 +96,13 @@ function App() {
     const id = form.get('id');
     const data = { entryDate: form.get('entryDate') || TODAY(), title: form.get('title') || '', content: form.get('content') || '', mood: form.get('mood') || 'Calm', status: form.get('status') || 'Completed', remarks: form.get('remarks') || '' };
     if (!data.title.trim() && !data.content.trim()) { notify('Write a few words before saving.'); return; }
-    try { await api(`/journal${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) }); await loadWorkspace(); setJournalDraft(null); notify('Journal entry saved'); }
+    try {
+      await api(`/journal${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
+      setJournalDraft(null);
+      notify('Journal entry saved');
+      try { await loadWorkspace(); }
+      catch { notify('Activity saved, but the list could not refresh. Reload the page to see it.'); }
+    }
     catch (error) { notify(error.message); }
   };
   const submitAuth = async event => {
@@ -170,7 +182,7 @@ function NavButton({ current, id, icon, count, onClick, children }) {
 
 function AuthScreen({ mode, setMode, onSubmit, error, busy }) {
   const register = mode === 'register';
-  return <main className="auth-screen"><section className="auth-art"><div className="brand brand-light"><span className="brand-mark">s.</span><span>SheKeeps</span></div><div className="art-copy"><span className="eyebrow">A LITTLE SPACE FOR YOU</span><h1>Make room for<br /><em>what matters.</em></h1><p>Gather your thoughts, make gentle plans, and remember the days as they happen.</p></div><div className="art-note"><span>✦</span> “The secret of getting ahead is getting started.”<small>— Mark Twain</small></div><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={onSubmit}><span className="eyebrow">{register ? 'A FRESH START' : 'WELCOME BACK'}</span><h2>{register ? 'Make this space yours.' : 'Your day, in focus.'}</h2><p className="muted">{register ? 'Create an account to begin collecting your thoughts.' : 'Sign in to pick up where you left off.'}</p>{register && <label className="field">Your name<input name="name" autoComplete="name" required minLength="2" placeholder="What should we call you?" /></label>}<label className="field">Email address<input name="email" type="email" autoComplete="email" required placeholder="you@example.com" /></label><label className="field">Password<input name="password" type="password" autoComplete={register ? 'new-password' : 'current-password'} required minLength="8" placeholder="At least 8 characters" /></label><button className="button button-dark button-wide" disabled={busy}>{busy ? 'Please wait…' : register ? 'Create account →' : 'Sign in →'}</button><p className="auth-switch">{register ? 'Already have an account?' : 'New to SheKeeps?'} <button type="button" className="text-button" onClick={() => setMode(register ? 'login' : 'register')}>{register ? 'Sign in' : 'Create an account'}</button></p>{error && <p className="auth-error">{error}</p>}</form><div className="auth-footer">A quieter way to get things done.</div></section></main>;
+  return <main className="auth-screen"><section className="auth-art"><div className="brand brand-light"><span className="brand-mark">s.</span><span>SheKeeps</span></div><div className="art-copy"><span className="eyebrow">A LITTLE SPACE FOR YOU</span><h1>Make room for<br /><em>what matters.</em></h1><p>Gather your thoughts, make gentle plans, and remember the days as they happen.</p></div><div className="art-note"><span>✦</span> “The secret of getting ahead is getting started.”<small>— Mark Twain</small></div><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={onSubmit}><span className="eyebrow">{register ? 'A FRESH START' : 'WELCOME BACK'}</span><h2>{register ? 'Make this space yours.' : 'Your day, in focus.'}</h2><p className="muted">{register ? 'Create an account to begin collecting your thoughts.' : 'Sign in to pick up where you left off.'}</p>{register && <label className="field">Your name<input name="name" autoComplete="name" required minLength="2" placeholder="What should we call you?" /></label>}<a className="button button-google button-wide" href="/api/auth/google">Continue with Google</a><div className="auth-divider">or use your email</div><label className="field">Email address<input name="email" type="email" autoComplete="email" required placeholder="you@example.com" /></label><label className="field">Password<input name="password" type="password" autoComplete={register ? 'new-password' : 'current-password'} required minLength="8" placeholder="At least 8 characters" /></label><button className="button button-dark button-wide" disabled={busy}>{busy ? 'Please wait…' : register ? 'Create account →' : 'Sign in →'}</button><p className="auth-switch">{register ? 'Already have an account?' : 'New to SheKeeps?'} <button type="button" className="text-button" onClick={() => setMode(register ? 'login' : 'register')}>{register ? 'Sign in' : 'Create an account'}</button></p>{error && <p className="auth-error">{error}</p>}</form><div className="auth-footer">A quieter way to get things done.</div></section></main>;
 }
 
 function Empty({ title, children, action, onClick }) {
