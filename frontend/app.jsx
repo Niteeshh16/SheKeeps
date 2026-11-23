@@ -26,25 +26,25 @@ function App() {
   const [user, setUser] = useState(null);
   const [bypass, setBypass] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
   const [view, setView] = useState('home');
   const [notes, setNotes] = useState([]);
   const [todos, setTodos] = useState([]);
   const [journal, setJournal] = useState([]);
+  const [diary, setDiary] = useState([]);
   const [noteFilter, setNoteFilter] = useState('All');
   const [todoFilter, setTodoFilter] = useState('All');
   const [editor, setEditor] = useState(null);
   const [journalDraft, setJournalDraft] = useState(null);
+  const [diaryDraft, setDiaryDraft] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState('');
-  const [busy, setBusy] = useState(false);
 
   const notify = message => { setToast(message); window.setTimeout(() => setToast(''), 2600); };
   const loadWorkspace = useCallback(async () => {
-    const [n, t, j] = await Promise.all([api('/notes'), api('/tasks'), api('/journal')]);
-    setNotes(n); setTodos(t); setJournal(j);
+    const [n, t, j, d] = await Promise.all([api('/notes'), api('/tasks'), api('/journal'), api('/diary')]);
+    setNotes(n); setTodos(t); setJournal(j); setDiary(d);
   }, []);
 
   useEffect(() => {
@@ -86,7 +86,7 @@ function App() {
   };
   const deleteItem = async (kind, item) => {
     if (!window.confirm(`Delete this ${kind === 'todo' ? 'todo' : kind}? This cannot be undone.`)) return;
-    const route = kind === 'todo' ? 'tasks' : kind === 'note' ? 'notes' : 'journal';
+    const route = kind === 'todo' ? 'tasks' : kind === 'note' ? 'notes' : kind === 'diary' ? 'diary' : 'journal';
     try { await api(`/${route}/${item.id}`, { method: 'DELETE' }); setEditor(null); setJournalDraft(null); await loadWorkspace(); notify('Deleted'); }
     catch (error) { notify(error.message); }
   };
@@ -105,25 +105,28 @@ function App() {
     }
     catch (error) { notify(error.message); }
   };
-  const submitAuth = async event => {
-    event.preventDefault(); setBusy(true); setAuthError('');
+  const saveDiary = async event => {
+    event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const id = form.get('id');
+    const data = { entryDate: form.get('entryDate') || TODAY(), title: form.get('title') || '', content: form.get('content') || '', mood: form.get('mood') || 'Calm' };
+    if (!data.title.trim() && !data.content.trim()) { notify('Write a few words before saving.'); return; }
     try {
-      const path = authMode === 'login' ? '/auth/login' : '/auth/register';
-      const result = await api(path, { method: 'POST', body: JSON.stringify({ email: form.get('email'), password: form.get('password'), ...(authMode === 'register' ? { name: form.get('name') } : {}) }) });
-      setUser(result.user); setBypass(false); await loadWorkspace();
-    } catch (error) { setAuthError(error.message); }
-    finally { setBusy(false); }
+      await api(`/diary${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
+      setDiaryDraft(null);
+      notify('Journal entry saved');
+      await loadWorkspace();
+    } catch (error) { notify(error.message); }
   };
   const signOut = async () => {
     if (bypass) { notify('Guest access is enabled for local development.'); return; }
     try { await api('/auth/logout', { method: 'POST', body: JSON.stringify({}) }); } catch { /* Local session can still be cleared. */ }
-    setUser(null); setNotes([]); setTodos([]); setJournal([]);
+    setUser(null); setNotes([]); setTodos([]); setJournal([]); setDiary([]);
   };
 
   const openEditor = (kind, item = null) => setEditor({ kind, item });
-  const openJournal = item => { setJournalDraft(item || { entryDate: TODAY(), title: '', content: '', mood: 'Calm' }); changeView('journal'); };
-  const todayEntry = journal.find(entry => String(entry.entryDate).slice(0, 10) === TODAY());
+  const openDiary = item => { setDiaryDraft(item || { entryDate: TODAY(), title: '', content: '', mood: 'Calm' }); changeView('diary'); };
+  const todayEntry = diary.find(entry => String(entry.entryDate).slice(0, 10) === TODAY());
   const pendingTodos = todos.filter(todo => !todo.completed);
   const filteredNotes = noteFilter === 'All' ? notes : notes.filter(note => note.category === noteFilter);
   const filteredTodos = todos.filter(todo => todoFilter === 'All' || (todoFilter === 'Done' ? todo.completed : !todo.completed))
@@ -134,15 +137,16 @@ function App() {
     return [
       ...notes.map(item => ({ ...item, kind: 'note', label: 'Note', text: item.content })),
       ...todos.map(item => ({ ...item, kind: 'todo', label: 'Todo', text: item.details })),
-      ...journal.map(item => ({ ...item, kind: 'journal', label: 'Journal', text: item.content }))
+      ...journal.map(item => ({ ...item, kind: 'journal', label: 'Daily activity', text: item.content })),
+      ...diary.map(item => ({ ...item, kind: 'diary', label: 'Journal', text: item.content }))
     ].filter(item => `${item.title} ${item.text || ''}`.toLowerCase().includes(term)).slice(0, 12);
-  }, [query, notes, todos, journal]);
+  }, [query, notes, todos, journal, diary]);
 
   if (loading) return <div className="loading-screen"><span className="brand-mark">s.</span><p>Opening your space…</p></div>;
-  if (!user) return <AuthScreen mode={authMode} setMode={setAuthMode} onSubmit={submitAuth} error={authError} busy={busy} />;
+  if (!user) return <AuthScreen error={authError} />;
 
   const firstName = user.name?.split(' ')[0] || 'there';
-  const pageNames = { home: 'Today', notes: 'Notes', todos: 'Todo list', journal: 'Daily activities' };
+  const pageNames = { home: 'Today', notes: 'Notes', todos: 'Todo list', journal: 'Daily activities', diary: 'Journal' };
   return <>
     <div className="app-shell">
       <aside className="sidebar">
@@ -152,6 +156,7 @@ function App() {
           <NavButton current={view} id="home" icon="⌂" onClick={changeView}>Today</NavButton>
           <NavButton current={view} id="notes" icon="▤" count={notes.length} onClick={changeView}>Notes</NavButton>
           <NavButton current={view} id="todos" icon="☑" count={pendingTodos.length} onClick={changeView}>Todo list</NavButton>
+          <NavButton current={view} id="diary" icon="✎" onClick={changeView}>Journal</NavButton>
           <NavButton current={view} id="journal" icon="◷" onClick={changeView}>Daily activities</NavButton>
         </nav>
         <div className="side-spacer" />
@@ -160,18 +165,19 @@ function App() {
         {!bypass && <button className="logout-button" onClick={signOut}>Sign out</button>}
       </aside>
       <main className="main-area">
-        <header className="topbar"><div className="breadcrumbs"><span>MY WORKSPACE</span><b>/</b><strong>{pageNames[view]}</strong></div><div className="topbar-actions"><span className="today-date">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span><button className="icon-button search-button" aria-label="Search" onClick={() => { setSearchOpen(true); setQuery(''); }}>⌕</button><button className="button button-dark create-button" onClick={() => view === 'journal' ? setJournalDraft({ entryDate: TODAY(), title: '', content: '', status: 'Completed', remarks: '' }) : openEditor(view === 'todos' ? 'todo' : 'note')}>＋ <span>Create new</span></button></div></header>
+        <header className="topbar"><div className="breadcrumbs"><span>MY WORKSPACE</span><b>/</b><strong>{pageNames[view]}</strong></div><div className="topbar-actions"><span className="today-date">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span><button className="icon-button search-button" aria-label="Search" onClick={() => { setSearchOpen(true); setQuery(''); }}>⌕</button><button className="button button-dark create-button" onClick={() => view === 'journal' ? setJournalDraft({ entryDate: TODAY(), title: '', content: '', status: 'Completed', remarks: '' }) : view === 'diary' ? openDiary(null) : openEditor(view === 'todos' ? 'todo' : 'note')}>＋ <span>Create new</span></button></div></header>
         <div className="view-root">
-          {view === 'home' && <HomeView firstName={firstName} notes={notes} todos={pendingTodos} entry={todayEntry} onView={changeView} onCreate={openEditor} onEdit={openEditor} onToggle={toggleTodo} onWrite={() => openJournal(todayEntry || null)} />}
+          {view === 'home' && <HomeView firstName={firstName} notes={notes} todos={pendingTodos} entry={todayEntry} onView={changeView} onCreate={openEditor} onEdit={openEditor} onToggle={toggleTodo} onWrite={() => openDiary(todayEntry || null)} />}
           {view === 'notes' && <NotesView notes={filteredNotes} filter={noteFilter} setFilter={setNoteFilter} onCreate={() => openEditor('note')} onEdit={item => openEditor('note', item)} />}
           {view === 'todos' && <TodosView todos={filteredTodos} filter={todoFilter} setFilter={setTodoFilter} onCreate={() => openEditor('todo')} onEdit={item => openEditor('todo', item)} onToggle={toggleTodo} />}
           {view === 'journal' && <JournalView entries={journal} draft={journalDraft} setDraft={setJournalDraft} onSave={saveJournal} onDelete={item => deleteItem('journal', item)} />}
+          {view === 'diary' && <DiaryView entries={diary} draft={diaryDraft} setDraft={setDiaryDraft} onSave={saveDiary} onDelete={item => deleteItem('diary', item)} />}
         </div>
         <footer className="app-footer"><span>Made for the life you’re living.</span><span>{new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span></footer>
       </main>
     </div>
     {editor && <Editor key={`${editor.kind}-${editor.item?.id || 'new'}`} editor={editor} onSave={saveItem} onClose={() => setEditor(null)} onDelete={() => deleteItem(editor.kind, editor.item)} />}
-    {searchOpen && <SearchDialog query={query} setQuery={setQuery} results={searchResults} onClose={() => setSearchOpen(false)} onSelect={item => { setSearchOpen(false); if (item.kind === 'journal') { changeView('journal'); setJournalDraft(item); } else { changeView(item.kind === 'todo' ? 'todos' : 'notes'); openEditor(item.kind, item); } }} />}
+    {searchOpen && <SearchDialog query={query} setQuery={setQuery} results={searchResults} onClose={() => setSearchOpen(false)} onSelect={item => { setSearchOpen(false); if (item.kind === 'journal') { changeView('journal'); setJournalDraft(item); } else if (item.kind === 'diary') { changeView('diary'); setDiaryDraft(item); } else { changeView(item.kind === 'todo' ? 'todos' : 'notes'); openEditor(item.kind, item); } }} />}
     <div className={cx('toast', toast && 'show')} role="status" aria-live="polite">{toast}</div>
   </>;
 }
@@ -180,11 +186,9 @@ function NavButton({ current, id, icon, count, onClick, children }) {
   return <button className={cx('nav-item', current === id && 'active')} onClick={() => onClick(id)}><span className="nav-icon">{icon}</span>{children}{count !== undefined && <span className="nav-count">{count}</span>}</button>;
 }
 
-function AuthScreen({ mode, setMode, onSubmit, error, busy }) {
-  const register = mode === 'register';
-  return <main className="auth-screen"><section className="auth-art"><div className="brand brand-light"><span className="brand-mark">s.</span><span>SheKeeps</span></div><div className="art-copy"><span className="eyebrow">A LITTLE SPACE FOR YOU</span><h1>Make room for<br /><em>what matters.</em></h1><p>Gather your thoughts, make gentle plans, and remember the days as they happen.</p></div><div className="art-note"><span>✦</span> “The secret of getting ahead is getting started.”<small>— Mark Twain</small></div><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /></section><section className="auth-form-wrap"><form className="auth-form" onSubmit={onSubmit}><span className="eyebrow">{register ? 'A FRESH START' : 'WELCOME BACK'}</span><h2>{register ? 'Make this space yours.' : 'Your day, in focus.'}</h2><p className="muted">{register ? 'Create an account to begin collecting your thoughts.' : 'Sign in to pick up where you left off.'}</p>{register && <label className="field">Your name<input name="name" autoComplete="name" required minLength="2" placeholder="What should we call you?" /></label>}<a className="button button-google button-wide" href="/api/auth/google">Continue with Google</a><div className="auth-divider">or use your email</div><label className="field">Email address<input name="email" type="email" autoComplete="email" required placeholder="you@example.com" /></label><label className="field">Password<input name="password" type="password" autoComplete={register ? 'new-password' : 'current-password'} required minLength="8" placeholder="At least 8 characters" /></label><button className="button button-dark button-wide" disabled={busy}>{busy ? 'Please wait…' : register ? 'Create account →' : 'Sign in →'}</button><p className="auth-switch">{register ? 'Already have an account?' : 'New to SheKeeps?'} <button type="button" className="text-button" onClick={() => setMode(register ? 'login' : 'register')}>{register ? 'Sign in' : 'Create an account'}</button></p>{error && <p className="auth-error">{error}</p>}</form><div className="auth-footer">A quieter way to get things done.</div></section></main>;
+function AuthScreen({ error }) {
+  return <main className="auth-screen"><section className="auth-art"><div className="brand brand-light"><span className="brand-mark">s.</span><span>SheKeeps</span></div><div className="art-copy"><span className="eyebrow">A LITTLE SPACE FOR YOU</span><h1>Make room for<br /><em>what matters.</em></h1><p>Gather your thoughts, make gentle plans, and remember the days as they happen.</p></div><div className="art-note"><span>✦</span> “The secret of getting ahead is getting started.”<small>— Mark Twain</small></div><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /></section><section className="auth-form-wrap"><div className="auth-form"><span className="eyebrow">YOUR PRIVATE SPACE</span><h2>Sign in securely.</h2><p className="muted">Use your Google account to access your notes, plans, and journal.</p><a className="button button-google button-wide" href="/api/auth/google">Continue with Google</a>{error && <p className="auth-error">{error}</p>}</div><div className="auth-footer">A quieter way to get things done.</div></section></main>;
 }
-
 function Empty({ title, children, action, onClick }) {
   return <div className="empty-state"><strong>{title}</strong>{children}{action && <><br /><button className="link-button" onClick={onClick}>＋ {action}</button></>}</div>;
 }
@@ -208,6 +212,11 @@ function NotesView({ notes, filter, setFilter, onCreate, onEdit }) {
 function TodosView({ todos, filter, setFilter, onCreate, onEdit, onToggle }) {
   return <><SectionHeading eyebrow="ONE THING AT A TIME" title="Todo list" subtitle="Keep your plans kind, clear, and doable." action="Add a todo" onClick={onCreate} /><div className="filter-row"><div className="task-filters">{['All', 'Not done', 'Done'].map(value => <button key={value} className={cx('filter-chip', filter === value && 'active')} onClick={() => setFilter(value)}>{value}{value === 'All' ? ` · ${todos.length}` : ''}</button>)}</div></div><article className="panel task-page"><div className="task-list">{todos.length ? todos.map(todo => <TodoRow key={todo.id} todo={todo} onToggle={onToggle} onEdit={onEdit} />) : <Empty title={filter === 'Done' ? 'No completed todos yet' : 'Your list is clear'} action="Add a todo" onClick={onCreate}>Add a task and check it off when you’re done.</Empty>}</div></article></>;
 }
+function DiaryView({ entries, draft, setDraft, onSave, onDelete }) {
+  const current = draft || { entryDate: TODAY(), title: '', content: '', mood: 'Calm' };
+  return <div className="journal-experience"><div className="journal-intro"><div><span className="eyebrow">PERSONAL REFLECTIONS</span><h1>Journal</h1><p>A private place for your thoughts, feelings, and moments worth remembering.</p></div></div><div className="journal-layout"><form className="journal-editor journal-writing-card" onSubmit={onSave}><input type="hidden" name="id" value={current.id || ''} /><div className="journal-editor-top"><label className="eyebrow">DATE<input type="date" name="entryDate" value={String(current.entryDate || TODAY()).slice(0, 10)} onChange={event => setDraft({ ...current, entryDate: event.target.value })} /></label><span className="draft-status">{current.id ? 'Editing journal entry' : 'New journal entry'}</span></div><label className="field">Title<input className="activity-title" name="title" maxLength="200" placeholder="Give today a title (optional)" value={current.title || ''} onChange={event => setDraft({ ...current, title: event.target.value })} /></label><label className="field">How are you feeling?<select name="mood" value={current.mood || 'Calm'} onChange={event => setDraft({ ...current, mood: event.target.value })}>{['Calm', 'Happy', 'Grateful', 'Focused', 'Tired', 'Thoughtful', 'Anxious'].map(value => <option key={value}>{value}</option>)}</select></label><label className="field">Your thoughts<textarea name="content" rows="12" placeholder="What would you like to remember about today?" value={current.content || ''} onChange={event => setDraft({ ...current, content: event.target.value })} /></label><div className="journal-editor-bottom"><small>{(current.content || '').trim() ? current.content.trim().split(/\s+/).length : 0} words</small><div>{current.id && <button type="button" className="button button-quiet" onClick={() => onDelete(current)}>Delete entry</button>}<button className="button button-dark">{current.id ? 'Update entry' : 'Save entry'}</button></div></div></form><aside className="journal-side"><section className="panel journal-list-panel activity-list-panel"><div className="panel-heading"><div><h2 className="panel-title">Journal entries</h2><p className="panel-sub">{entries.length} saved {entries.length === 1 ? 'entry' : 'entries'}</p></div><button type="button" className="link-button" onClick={() => setDraft({ entryDate: TODAY(), title: '', content: '', mood: 'Calm' })}>＋ New</button></div><div className="activity-table-wrap"><table className="activity-table"><thead><tr><th>Date</th><th>Title</th><th>Mood</th><th>Action</th></tr></thead><tbody>{entries.map(entry => <tr key={entry.id} className={draft?.id === entry.id ? 'selected' : ''} onClick={() => setDraft(entry)}><td>{fmtDate(entry.entryDate, { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>{entry.title || entry.content?.slice(0, 80) || 'Untitled'}</td><td>{entry.mood}</td><td><button type="button" className="activity-delete" aria-label={`Delete journal entry: ${entry.title || entry.entryDate}`} onClick={event => { event.stopPropagation(); onDelete(entry); }}>Delete</button></td></tr>)}</tbody></table>{!entries.length && <p className="muted activity-empty">Your journal starts with a few words.</p>}</div></section></aside></div></div>;
+}
+
 function JournalView({ entries, draft, setDraft, onSave, onDelete }) {
   const current = draft || { entryDate: TODAY(), title: '', content: '', mood: 'Calm', status: 'Completed', remarks: '' };
   const prompts = ['What felt like you today?', 'What is taking up space in your mind?', 'What are three small things you’re grateful for?', 'What would make tomorrow feel gentler?', 'When did you feel most present today?'];

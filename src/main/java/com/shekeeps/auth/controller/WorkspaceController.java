@@ -30,6 +30,7 @@ public class WorkspaceController {
     public record TaskInput(@NotBlank @Size(max=200) String title, String details, LocalDate dueDate,
                             String priority, Boolean completed) {}
     public record JournalInput(LocalDate entryDate, @Size(max=200) String title, String content, String mood, String status, String remarks) {}
+    public record DiaryInput(LocalDate entryDate, @Size(max=200) String title, String content, String mood) {}
 
     @GetMapping("/notes") public Map<String,Object> notes(HttpServletRequest request) {
         UUID uid = userId(request);
@@ -77,6 +78,21 @@ public class WorkspaceController {
         return ok(db.queryForMap("UPDATE journal_entries SET entry_date=?,title=?,content=?,mood=?,status=?,remarks=?,updated_at=NOW() WHERE id=? AND user_id=? RETURNING id,entry_date AS \"entryDate\",title,content,mood,status,remarks,created_at AS \"createdAt\",updated_at AS \"updatedAt\"",date,or(body.title(),""),or(body.content(),""),or(body.mood(),"Calm"),or(body.status(),"Completed"),or(body.remarks(),""),id,userId(request)));
     }
     @DeleteMapping("/journal/{id}") public Map<String,Object> deleteJournal(@PathVariable UUID id,HttpServletRequest request) { delete("journal_entries",id,userId(request)); return Map.of("status","success","message","Journal entry deleted"); }
+
+    @GetMapping("/diary") public Map<String,Object> diary(HttpServletRequest request) {
+        var rows=db.query("SELECT id,entry_date,title,content,mood,created_at,updated_at FROM personal_journal_entries WHERE user_id=? ORDER BY entry_date DESC",
+                (rs,n)->Map.of("id",rs.getObject("id",UUID.class),"entryDate",rs.getObject("entry_date",LocalDate.class),"title",rs.getString("title"),"content",rs.getString("content"),"mood",rs.getString("mood"),"createdAt",rs.getObject("created_at",OffsetDateTime.class),"updatedAt",rs.getObject("updated_at",OffsetDateTime.class)),userId(request));
+        return ok(rows);
+    }
+    @PostMapping("/diary") @ResponseStatus(HttpStatus.CREATED) public Map<String,Object> createDiary(@Valid @RequestBody DiaryInput body,HttpServletRequest request) {
+        LocalDate date=body.entryDate()==null?LocalDate.now():body.entryDate();
+        return ok(db.queryForMap("INSERT INTO personal_journal_entries(user_id,entry_date,title,content,mood) VALUES(?,?,?,?,?) RETURNING id,entry_date AS \"entryDate\",title,content,mood,created_at AS \"createdAt\",updated_at AS \"updatedAt\"",userId(request),date,or(body.title(),""),or(body.content(),""),or(body.mood(),"Calm")));
+    }
+    @PutMapping("/diary/{id}") public Map<String,Object> updateDiary(@PathVariable UUID id,@Valid @RequestBody DiaryInput body,HttpServletRequest request) {
+        LocalDate date=body.entryDate()==null?LocalDate.now():body.entryDate();
+        return ok(db.queryForMap("UPDATE personal_journal_entries SET entry_date=?,title=?,content=?,mood=?,updated_at=NOW() WHERE id=? AND user_id=? RETURNING id,entry_date AS \"entryDate\",title,content,mood,created_at AS \"createdAt\",updated_at AS \"updatedAt\"",date,or(body.title(),""),or(body.content(),""),or(body.mood(),"Calm"),id,userId(request)));
+    }
+    @DeleteMapping("/diary/{id}") public Map<String,Object> deleteDiary(@PathVariable UUID id,HttpServletRequest request) { delete("personal_journal_entries",id,userId(request)); return Map.of("status":"success","message":"Diary entry deleted"); }
 
     private UUID userId(HttpServletRequest request) { User user=auth.authenticate(accessToken(request)); return user.id(); }
     private String accessToken(HttpServletRequest request) {

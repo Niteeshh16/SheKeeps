@@ -58,3 +58,15 @@ CREATE INDEX IF NOT EXISTS idx_journal_user_date ON journal_entries(user_id, ent
 ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS journal_entries_user_id_entry_date_key;
 ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'Completed';
 ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS personal_journal_entries (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ entry_date DATE NOT NULL,
+ title VARCHAR(200) NOT NULL DEFAULT '',
+ content TEXT NOT NULL DEFAULT '',
+ mood VARCHAR(30) NOT NULL DEFAULT 'Calm',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_personal_journal_user_date ON personal_journal_entries(user_id, entry_date DESC);
